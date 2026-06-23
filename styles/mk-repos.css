@@ -97,6 +97,11 @@
   opacity: 0.85;
 }
 
+.mk-repos-warning {
+  margin: 8px 0 0;
+  color: var(--color-level-warning, #f0c674);
+}
+
 .mk-repos-table {
   width: 100%;
   border-collapse: collapse;

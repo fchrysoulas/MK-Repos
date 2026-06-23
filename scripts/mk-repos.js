@@ -1,5 +1,5 @@
 /*
- * MK-Repos v1.0.0
+ * MK-Repos v1.1.0
  * Foundry VTT v12-v14 compatible character repository bridge.
  *
  * Design goals:
@@ -17,7 +17,7 @@ const MK_REPOS = {
   FLAG_REVISION: "revision",
   FLAG_LAST_SYNCED_AT: "lastSyncedAt",
   FLAG_TEMPLATE_ID: "templateId",
-  DEFAULT_ALLOWED_TYPES: "character",
+  DEFAULT_ALLOWED_TYPES: "character,Player",
   MODULE_TITLE: "MK-Repos"
 };
 
@@ -76,14 +76,29 @@ function mkReposSlugify(value) {
     .replace(/^-+|-+$/g, "") || "unknown";
 }
 
+function mkReposActorTypeKey(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function mkReposActorTypesFromString(value) {
+  return String(value ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 function mkReposAllowedTypes() {
-  const raw = game.settings.get(MK_REPOS.ID, "allowedActorTypes") || MK_REPOS.DEFAULT_ALLOWED_TYPES;
-  return new Set(raw.split(",").map(s => s.trim()).filter(Boolean));
+  const raw = game.settings.get(MK_REPOS.ID, "allowedActorTypes") || "";
+  const types = [
+    ...mkReposActorTypesFromString(MK_REPOS.DEFAULT_ALLOWED_TYPES),
+    ...mkReposActorTypesFromString(raw)
+  ];
+  return new Set(types.map(mkReposActorTypeKey).filter(Boolean));
 }
 
 function mkReposIsCharacterActor(actor) {
   if (!actor) return false;
-  return mkReposAllowedTypes().has(actor.type);
+  return mkReposAllowedTypes().has(mkReposActorTypeKey(actor.type));
 }
 
 function mkReposUserCanUseActor(actor) {
@@ -139,7 +154,7 @@ function mkReposRegisterSettings() {
 
   game.settings.register(MK_REPOS.ID, "allowedActorTypes", {
     name: "Allowed Actor Types",
-    hint: "Comma-separated Actor types that MK-Repos may push/pull. Default: character.",
+    hint: "Comma-separated Actor types that MK-Repos may push/pull. Defaults include character and Player.",
     scope: "world",
     config: true,
     type: String,
@@ -396,26 +411,53 @@ function mkReposFindActorByVaultId(vaultId) {
 }
 
 function mkReposActorList() {
-  if (!game.actors) return [];
-  if (Array.isArray(game.actors.contents)) return game.actors.contents;
-  if (typeof game.actors.filter === "function") return game.actors.filter(() => true);
-  if (typeof game.actors.values === "function") return Array.from(game.actors.values());
+  const collection = game.actors;
+  if (!collection) return [];
+
+  const actors = [];
+  const addActor = actor => {
+    if (!actor || !actor.type || !actor.name) return;
+    const key = actor.uuid ?? actor.id ?? actor._id;
+    const exists = key
+      ? actors.some(existing => (existing.uuid ?? existing.id ?? existing._id) === key)
+      : actors.includes(actor);
+    if (!exists) actors.push(actor);
+  };
+  const addActors = values => {
+    if (!values) return;
+    for (const actor of values) addActor(actor);
+  };
+
+  if (Array.isArray(collection.contents)) addActors(collection.contents);
+  if (typeof collection.filter === "function") addActors(collection.filter(actor => actor?.type));
+  if (typeof collection.values === "function") addActors(Array.from(collection.values()));
   try {
-    return Array.from(game.actors);
+    addActors(Array.from(collection));
   } catch (err) {
-    return [];
+    // Some Foundry collection implementations are not directly iterable.
   }
+
+  return actors;
 }
 
 function mkReposSelectableActors() {
   return mkReposActorList()
-    .filter(actor => mkReposIsCharacterActor(actor) && mkReposUserCanUseActor(actor))
-    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+    .sort((a, b) => {
+      const aAllowed = mkReposIsCharacterActor(a) ? 0 : 1;
+      const bAllowed = mkReposIsCharacterActor(b) ? 0 : 1;
+      if (aAllowed !== bAllowed) return aAllowed - bAllowed;
+
+      const aUsable = mkReposUserCanUseActor(a) ? 0 : 1;
+      const bUsable = mkReposUserCanUseActor(b) ? 0 : 1;
+      if (aUsable !== bUsable) return aUsable - bUsable;
+
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+    });
 }
 
 function mkReposActorById(actorId) {
   if (!actorId) return null;
-  return game.actors?.get?.(actorId) ?? mkReposActorList().find(actor => actor.id === actorId || actor._id === actorId) ?? null;
+  return game.actors?.get?.(actorId) ?? mkReposActorList().find(actor => actor.id === actorId || actor._id === actorId || actor.uuid === actorId) ?? null;
 }
 
 function mkReposPrepareActorCoreData(actorData) {
@@ -522,15 +564,24 @@ async function mkReposStatus(actor) {
 }
 
 async function mkReposTestConnection() {
-  return mkReposApi({
-    action: "testConnection",
-    testId: `test-${mkReposRandomId()}`,
-    owner: game.user?.name ?? "",
-    systemId: mkReposSystemId(),
-    systemVersion: mkReposSystemVersion(),
-    foundryVersion: mkReposGameVersion(),
-    message: "MK-Repos connection test"
-  });
+  try {
+    return await mkReposApi({
+      action: "testConnection",
+      testId: `test-${mkReposRandomId()}`,
+      owner: game.user?.name ?? "",
+      systemId: mkReposSystemId(),
+      systemVersion: mkReposSystemVersion(),
+      foundryVersion: mkReposGameVersion(),
+      message: "MK-Repos connection test"
+    });
+  } catch (err) {
+    if (err.details?.error === "unknown_action") {
+      const error = new Error("The deployed Google Apps Script does not include Test Connection yet. Paste the latest Apps Script code, then deploy a new Web App version.");
+      error.details = err.details;
+      throw error;
+    }
+    throw err;
+  }
 }
 
 async function mkReposLinkActor(actor) {
@@ -693,9 +744,16 @@ function mkReposOpenActorPanel(actor) {
 
 function mkReposSettingsPanelHtml() {
   const actors = mkReposSelectableActors();
-  const options = actors.length ? actors.map(actor => `
-    <option value="${mkReposEscapeHtml(actor.id)}">${mkReposEscapeHtml(actor.name)} (${mkReposEscapeHtml(actor.type)})</option>
-  `).join("") : `<option value="">No allowed owned actors found</option>`;
+  const options = actors.length ? actors.map(actor => {
+    const notes = [];
+    if (!mkReposIsCharacterActor(actor)) notes.push("type not allowed");
+    if (!mkReposUserCanUseActor(actor)) notes.push("not owned");
+    const noteText = notes.length ? ` - ${notes.join(", ")}` : "";
+    const actorId = actor.id ?? actor._id ?? actor.uuid ?? "";
+    return `
+      <option value="${mkReposEscapeHtml(actorId)}">${mkReposEscapeHtml(actor.name)} (${mkReposEscapeHtml(actor.type)})${mkReposEscapeHtml(noteText)}</option>
+    `;
+  }).join("") : `<option value="">No local actors found</option>`;
 
   return `
     <div class="mk-repos-settings-panel">
@@ -724,9 +782,21 @@ function mkReposRefreshSettingsActorStatus(overlay) {
 
   const actorId = overlay.querySelector(".mk-repos-actor-select")?.value;
   const actor = mkReposActorById(actorId);
-  status.innerHTML = actor
-    ? mkReposActorStatusHtml(actor)
-    : `<p class="mk-repos-help">No local character is available for MK-Repos.</p>`;
+  if (!actor) {
+    status.innerHTML = `<p class="mk-repos-help">No local actors are available in this world.</p>`;
+    return;
+  }
+
+  const warnings = [];
+  if (!mkReposIsCharacterActor(actor)) {
+    warnings.push(`Actor type '${actor.type}' is not in Allowed Actor Types. Add '${actor.type}' to that module setting if this is your system's character type.`);
+  }
+  if (!mkReposUserCanUseActor(actor)) warnings.push("You do not own this Actor, so push and pull actions will be blocked.");
+
+  status.innerHTML = `
+    ${mkReposActorStatusHtml(actor)}
+    ${warnings.map(message => `<p class="mk-repos-warning">${mkReposEscapeHtml(message)}</p>`).join("")}
+  `;
 }
 
 function mkReposSetTestResult(overlay, message) {
@@ -879,5 +949,5 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", () => {
   mkReposExposeApi();
-  console.log(`${MK_REPOS.MODULE_TITLE} | Ready v1.0.0 for Foundry ${mkReposGameVersion()} / system ${mkReposSystemId()} ${mkReposSystemVersion()}`);
+  console.log(`${MK_REPOS.MODULE_TITLE} | Ready v1.1.0 for Foundry ${mkReposGameVersion()} / system ${mkReposSystemId()} ${mkReposSystemVersion()}`);
 });

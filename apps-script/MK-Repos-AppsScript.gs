@@ -1,5 +1,5 @@
 /**
- * MK-Repos Google Apps Script Bridge v1.0.0
+ * MK-Repos Google Apps Script Bridge v1.1.0
  *
  * Setup:
  * 1. Create a Google Sheet.
@@ -15,7 +15,7 @@
  * 7. Paste the /exec URL and the same token into Foundry's MK-Repos settings.
  */
 
-const MK_REPOS_VERSION = '1.0.0';
+const MK_REPOS_VERSION = '1.1.0';
 const MK_REPOS_CHUNK_SIZE = 45000;
 
 const MK_REPOS_SHEETS = {

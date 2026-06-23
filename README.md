@@ -1,22 +1,21 @@
-# MK-Repos v1.0.0
+# MK-Repos v1.1.0
 
-MK-Repos is a lightweight Foundry VTT character repository module for sharing player character sheet data between different Foundry servers.
+MK-Repos is a lightweight Foundry VTT character repository module for sharing player character data between Foundry servers through Google Sheets and an Apps Script bridge.
 
-Version 1 is intentionally manual and safe:
+The module is intentionally manual: users choose when to push or pull character data, and full Actor JSON remains the source of truth for reconstruction.
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes and versioning policy.
+
+## Features
 
 - Foundry VTT v12-v13-v14 compatibility target
-- Character-only by default (`actor.type === "character"`)
-- Manual Push / Pull
-- Google Sheets as the repository
-- Google Apps Script as the bridge
+- Manual Push and Pull from module settings
+- Google Sheets repository with Apps Script bridge
 - Revision conflict protection
 - Full Actor JSON storage for faithful reconstruction
 - Human-readable flattened character sheet fields
 - Items and Active Effects exported into separate repository tabs
-
-## Why this architecture?
-
-The Google Sheet is human-readable, but the full Actor JSON remains the source of truth. This avoids losing system-specific sheet information, embedded items, effects, flags, talents, spells, and module data.
+- Connection test that writes a dummy record to Google Sheets
 
 ## Installation
 
@@ -27,10 +26,10 @@ The Google Sheet is human-readable, but the full Actor JSON remains the source o
 4. Configure the module settings:
    - Google Apps Script Web App URL
    - Repository Token
-   - Allowed Actor Types, default: `character`
-   - Repository Controls: open the MK-Repos push/pull and connection test panel
+   - Allowed Actor Types, defaults include `character` and `Player`
+   - Repository Controls
 
-## Google Sheets setup
+## Google Sheets Setup
 
 1. Create a Google Sheet.
 2. Open **Extensions -> Apps Script**.
@@ -45,7 +44,9 @@ The Google Sheet is human-readable, but the full Actor JSON remains the source o
    - Who has access: **Anyone with the link**
 8. Copy the `/exec` Web App URL into the Foundry module setting.
 
-## Using it
+When updating the Apps Script after it has already been deployed, open **Deploy -> Manage deployments**, edit the existing Web App deployment, choose **New version**, and deploy. The `/exec` URL can keep serving old code until a new version is deployed.
+
+## Usage
 
 1. Open **Configure Settings -> Module Settings -> MK-Repos -> Repository Controls**.
 2. Click **Open MK-Repos**.
@@ -58,19 +59,23 @@ The Google Sheet is human-readable, but the full Actor JSON remains the source o
    - **Repository** to list available repository characters.
    - **Test Connection** to add a dummy row to the `ConnectionTests` sheet.
 
-You can also open the settings panel from the console or a macro:
+If a local actor appears as **type not allowed**, add that actor type to the **Allowed Actor Types** setting. Some game systems use type names other than `character` or `Player`.
+
+## Macros
+
+Open the settings panel:
 
 ```js
 game.mkRepos.openSettings();
 ```
 
-Open only the repository browser from the console or a macro:
+Open only the repository browser:
 
 ```js
 await game.mkRepos.openBrowser();
 ```
 
-Push an actor from a macro:
+Push an actor:
 
 ```js
 await game.mkRepos.pushActor(actor);
@@ -82,7 +87,7 @@ Pull by vault ID:
 await game.mkRepos.pullByVaultId("your-vault-id-here");
 ```
 
-## Repository tabs
+## Repository Tabs
 
 The Apps Script creates these tabs:
 
@@ -94,21 +99,7 @@ The Apps Script creates these tabs:
 - `Templates`: reserved for future system template builder support
 - `ConnectionTests`: dummy connection-check records
 
-## v12-v13-v14 compatibility notes
-
-MK-Repos avoids subclassing Actor sheets or depending on system-specific sheet internals. It does not add buttons to character sheets. Push, Pull, Repository, Status, and Test Connection controls live in the module settings menu.
-
-The modal UI is plain DOM, with a tiny settings-menu launcher so the controls appear from Foundry's Configure Settings flow.
-
-## Known v1 limitations
-
-- No automatic live sync.
-- No field-level merge UI yet.
-- Google Sheet edits are not imported field-by-field yet; Pull uses `RawActor` as the source of truth.
-- Image files are not uploaded. If a portrait/token path exists only on Server A, Server B may need the same asset path or a manual replacement.
-- The Shadowdark template is currently automatic: all primitive fields from `actor.system` are flattened. A visual template builder is planned for a later version.
-
-## Safety notes
+## Safety Notes
 
 The repository token is not a high-security secret because it is used by client-side Foundry code. Use it as a shared access key for your own table, not as a valuable password.
 
