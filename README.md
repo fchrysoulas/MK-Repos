@@ -1,4 +1,4 @@
-# MK-Repos v1.1.0
+# MK-Repos
 
 MK-Repos is a lightweight Foundry VTT character repository module for sharing player character data between Foundry servers through Google Sheets and an Apps Script bridge.
 
