@@ -93,20 +93,23 @@ function mkReposUserCanUseActor(actor) {
   return false;
 }
 
-function mkReposGetRootElement(html, app) {
-  if (html instanceof HTMLElement) return html;
-  if (html?.[0] instanceof HTMLElement) return html[0];
-  if (html?.jquery && html[0] instanceof HTMLElement) return html[0];
-  if (app?.element instanceof HTMLElement) return app.element;
-  if (app?.element?.[0] instanceof HTMLElement) return app.element[0];
-  return null;
-}
+function mkReposSettingsMenuClass() {
+  const BaseApplication = globalThis.FormApplication ?? globalThis.Application ?? globalThis.foundry?.applications?.api?.ApplicationV2;
+  if (!BaseApplication) {
+    return class MKReposSettingsMenu {
+      render() {
+        mkReposOpenSettingsPanel();
+        return this;
+      }
+    };
+  }
 
-function mkReposActorFromApp(app) {
-  if (app?.actor) return app.actor;
-  if (app?.document?.documentName === "Actor") return app.document;
-  if (globalThis.Actor && app?.document instanceof Actor) return app.document;
-  return null;
+  return class MKReposSettingsMenu extends BaseApplication {
+    render() {
+      mkReposOpenSettingsPanel();
+      return this;
+    }
+  };
 }
 
 function mkReposEscapeHtml(value) {
@@ -152,13 +155,13 @@ function mkReposRegisterSettings() {
     default: false
   });
 
-  game.settings.register(MK_REPOS.ID, "showSheetButton", {
-    name: "Show Character Sheet Button",
-    hint: "Add the MK-Repos box button to character sheet headers.",
-    scope: "client",
-    config: true,
-    type: Boolean,
-    default: true
+  game.settings.registerMenu(MK_REPOS.ID, "repositoryControls", {
+    name: "Repository Controls",
+    label: "Open MK-Repos",
+    hint: "Push, pull, browse repository characters, and test the Google Sheets connection.",
+    icon: "fas fa-box-archive",
+    type: mkReposSettingsMenuClass(),
+    restricted: false
   });
 }
 
@@ -392,6 +395,29 @@ function mkReposFindActorByVaultId(vaultId) {
   return game.actors?.find?.(actor => actor.getFlag?.(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) === vaultId) ?? null;
 }
 
+function mkReposActorList() {
+  if (!game.actors) return [];
+  if (Array.isArray(game.actors.contents)) return game.actors.contents;
+  if (typeof game.actors.filter === "function") return game.actors.filter(() => true);
+  if (typeof game.actors.values === "function") return Array.from(game.actors.values());
+  try {
+    return Array.from(game.actors);
+  } catch (err) {
+    return [];
+  }
+}
+
+function mkReposSelectableActors() {
+  return mkReposActorList()
+    .filter(actor => mkReposIsCharacterActor(actor) && mkReposUserCanUseActor(actor))
+    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+}
+
+function mkReposActorById(actorId) {
+  if (!actorId) return null;
+  return game.actors?.get?.(actorId) ?? mkReposActorList().find(actor => actor.id === actorId || actor._id === actorId) ?? null;
+}
+
 function mkReposPrepareActorCoreData(actorData) {
   const data = mkReposDuplicate(actorData);
   delete data._id;
@@ -495,6 +521,66 @@ async function mkReposStatus(actor) {
   };
 }
 
+async function mkReposTestConnection() {
+  return mkReposApi({
+    action: "testConnection",
+    testId: `test-${mkReposRandomId()}`,
+    owner: game.user?.name ?? "",
+    systemId: mkReposSystemId(),
+    systemVersion: mkReposSystemVersion(),
+    foundryVersion: mkReposGameVersion(),
+    message: "MK-Repos connection test"
+  });
+}
+
+async function mkReposLinkActor(actor) {
+  const existing = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || mkReposRandomId();
+  const vaultId = await mkReposPrompt("Vault ID for this character", existing);
+  if (!vaultId) return null;
+  await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID, vaultId.trim());
+  await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_TEMPLATE_ID, mkReposGetTemplateId(actor));
+  mkReposNotify(`Linked ${actor.name} to ${vaultId.trim()}.`);
+  return vaultId.trim();
+}
+
+async function mkReposPushActorWithPrompt(actor) {
+  try {
+    const result = await mkReposPushActor(actor);
+    mkReposNotify(`Pushed ${actor.name} to repository. Revision ${result.revision}.`);
+    return result;
+  } catch (err) {
+    if (err.details?.error === "conflict") {
+      const proceed = await mkReposConfirm(`Conflict detected. Repository revision is ${err.details.repositoryRevision}. Force push and overwrite it?`);
+      if (proceed) {
+        const result = await mkReposPushActor(actor, { force: true });
+        mkReposNotify(`Force-pushed ${actor.name}. Revision ${result.revision}.`, "warn");
+        return result;
+      }
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function mkReposPullActorWithPrompt(actor) {
+  const proceed = await mkReposConfirm(`Pull repository version into ${actor.name}? This replaces local sheet data, items, and effects.`);
+  if (!proceed) return null;
+  const result = await mkReposPullActor(actor);
+  mkReposNotify(`Pulled ${result.actor.name}. Revision ${result.revision}.`);
+  return result;
+}
+
+async function mkReposNotifyActorStatus(actor) {
+  const status = await mkReposStatus(actor);
+  if (!status.linked) {
+    mkReposNotify(`${actor.name} is not linked to the repository.`, "warn");
+    return status;
+  }
+  const state = status.localRevision === status.remoteRevision ? "Synced" : "Different revisions";
+  mkReposNotify(`${state}. Local ${status.localRevision}, repository ${status.remoteRevision}.`);
+  return status;
+}
+
 function mkReposModal({ title, content, buttons = [], width = 620 }) {
   const overlay = document.createElement("div");
   overlay.className = "mk-repos-overlay";
@@ -502,7 +588,7 @@ function mkReposModal({ title, content, buttons = [], width = 620 }) {
     <div class="mk-repos-modal" style="max-width: ${Number(width) || 620}px">
       <header class="mk-repos-modal-header">
         <h2>${mkReposEscapeHtml(title)}</h2>
-        <button type="button" class="mk-repos-close" title="Close">×</button>
+        <button type="button" class="mk-repos-close" title="Close">&times;</button>
       </header>
       <section class="mk-repos-modal-content">${content}</section>
       <footer class="mk-repos-modal-footer"></footer>
@@ -578,57 +664,127 @@ function mkReposOpenActorPanel(actor) {
         label: "Link ID",
         icon: "fas fa-link",
         close: false,
-        callback: async () => {
-          const existing = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || mkReposRandomId();
-          const vaultId = await mkReposPrompt("Vault ID for this character", existing);
-          if (!vaultId) return;
-          await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID, vaultId.trim());
-          await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_TEMPLATE_ID, mkReposGetTemplateId(actor));
-          mkReposNotify(`Linked ${actor.name} to ${vaultId.trim()}.`);
+        callback: () => mkReposLinkActor(actor)
+      },
+      {
+        label: "Push",
+        icon: "fas fa-upload",
+        callback: () => mkReposPushActorWithPrompt(actor)
+      },
+      {
+        label: "Pull",
+        icon: "fas fa-download",
+        callback: () => mkReposPullActorWithPrompt(actor)
+      },
+      {
+        label: "Status",
+        icon: "fas fa-circle-info",
+        close: false,
+        callback: () => mkReposNotifyActorStatus(actor)
+      },
+      {
+        label: "Repository",
+        icon: "fas fa-box-archive",
+        callback: () => mkReposOpenBrowser()
+      }
+    ]
+  });
+}
+
+function mkReposSettingsPanelHtml() {
+  const actors = mkReposSelectableActors();
+  const options = actors.length ? actors.map(actor => `
+    <option value="${mkReposEscapeHtml(actor.id)}">${mkReposEscapeHtml(actor.name)} (${mkReposEscapeHtml(actor.type)})</option>
+  `).join("") : `<option value="">No allowed owned actors found</option>`;
+
+  return `
+    <div class="mk-repos-settings-panel">
+      <label class="mk-repos-field-label" for="mk-repos-actor-select">Local Character</label>
+      <select id="mk-repos-actor-select" class="mk-repos-actor-select" ${actors.length ? "" : "disabled"}>
+        ${options}
+      </select>
+      <div class="mk-repos-selected-status"></div>
+      <p class="mk-repos-help">Use the module settings controls to manually push or pull character repository data.</p>
+      <p class="mk-repos-help">Test Connection adds one dummy row to the ConnectionTests tab in the Google Sheet.</p>
+      <p class="mk-repos-test-result" aria-live="polite"></p>
+    </div>
+  `;
+}
+
+function mkReposSelectedSettingsActor(overlay) {
+  const actorId = overlay.querySelector(".mk-repos-actor-select")?.value;
+  const actor = mkReposActorById(actorId);
+  if (!actor) throw new Error("Choose a local character first.");
+  return actor;
+}
+
+function mkReposRefreshSettingsActorStatus(overlay) {
+  const status = overlay.querySelector(".mk-repos-selected-status");
+  if (!status) return;
+
+  const actorId = overlay.querySelector(".mk-repos-actor-select")?.value;
+  const actor = mkReposActorById(actorId);
+  status.innerHTML = actor
+    ? mkReposActorStatusHtml(actor)
+    : `<p class="mk-repos-help">No local character is available for MK-Repos.</p>`;
+}
+
+function mkReposSetTestResult(overlay, message) {
+  const result = overlay.querySelector(".mk-repos-test-result");
+  if (result) result.textContent = message;
+}
+
+function mkReposOpenSettingsPanel() {
+  const overlay = mkReposModal({
+    title: "MK-Repos Settings",
+    width: 760,
+    content: mkReposSettingsPanelHtml(),
+    buttons: [
+      {
+        label: "Test Connection",
+        close: false,
+        callback: async (event, modal) => {
+          mkReposSetTestResult(modal, "Testing connection...");
+          const result = await mkReposTestConnection();
+          const testId = result.testId ? ` (${result.testId})` : "";
+          mkReposSetTestResult(modal, `Connection OK. Dummy record added${testId}.`);
+          mkReposNotify(`Connection OK. Dummy record added${testId}.`);
+        }
+      },
+      {
+        label: "Link ID",
+        icon: "fas fa-link",
+        close: false,
+        callback: async (event, modal) => {
+          await mkReposLinkActor(mkReposSelectedSettingsActor(modal));
+          mkReposRefreshSettingsActorStatus(modal);
         }
       },
       {
         label: "Push",
         icon: "fas fa-upload",
-        callback: async () => {
-          try {
-            const result = await mkReposPushActor(actor);
-            mkReposNotify(`Pushed ${actor.name} to repository. Revision ${result.revision}.`);
-          } catch (err) {
-            if (err.details?.error === "conflict") {
-              const proceed = await mkReposConfirm(`Conflict detected. Repository revision is ${err.details.repositoryRevision}. Force push and overwrite it?`);
-              if (proceed) {
-                const result = await mkReposPushActor(actor, { force: true });
-                mkReposNotify(`Force-pushed ${actor.name}. Revision ${result.revision}.`, "warn");
-              }
-              return;
-            }
-            throw err;
-          }
+        close: false,
+        callback: async (event, modal) => {
+          await mkReposPushActorWithPrompt(mkReposSelectedSettingsActor(modal));
+          mkReposRefreshSettingsActorStatus(modal);
         }
       },
       {
         label: "Pull",
         icon: "fas fa-download",
-        callback: async () => {
-          const proceed = await mkReposConfirm(`Pull repository version into ${actor.name}? This replaces local sheet data, items, and effects.`);
-          if (!proceed) return;
-          const result = await mkReposPullActor(actor);
-          mkReposNotify(`Pulled ${result.actor.name}. Revision ${result.revision}.`);
+        close: false,
+        callback: async (event, modal) => {
+          await mkReposPullActorWithPrompt(mkReposSelectedSettingsActor(modal));
+          mkReposRefreshSettingsActorStatus(modal);
         }
       },
       {
         label: "Status",
         icon: "fas fa-circle-info",
         close: false,
-        callback: async () => {
-          const status = await mkReposStatus(actor);
-          if (!status.linked) {
-            mkReposNotify(`${actor.name} is not linked to the repository.`, "warn");
-            return;
-          }
-          const state = status.localRevision === status.remoteRevision ? "Synced" : "Different revisions";
-          mkReposNotify(`${state}. Local ${status.localRevision}, repository ${status.remoteRevision}.`);
+        callback: async (event, modal) => {
+          await mkReposNotifyActorStatus(mkReposSelectedSettingsActor(modal));
+          mkReposRefreshSettingsActorStatus(modal);
         }
       },
       {
@@ -638,6 +794,10 @@ function mkReposOpenActorPanel(actor) {
       }
     ]
   });
+
+  overlay.querySelector(".mk-repos-actor-select")?.addEventListener("change", () => mkReposRefreshSettingsActorStatus(overlay));
+  mkReposRefreshSettingsActorStatus(overlay);
+  return overlay;
 }
 
 async function mkReposOpenBrowser() {
@@ -699,50 +859,15 @@ async function mkReposOpenBrowser() {
   });
 }
 
-function mkReposInjectSheetButton(app, html) {
-  if (!game.settings.get(MK_REPOS.ID, "showSheetButton")) return;
-  const actor = mkReposActorFromApp(app);
-  if (!mkReposIsCharacterActor(actor)) return;
-  if (!mkReposUserCanUseActor(actor)) return;
-
-  const root = mkReposGetRootElement(html, app);
-  if (!root || root.querySelector(".mk-repos-sheet-button")) return;
-
-  const header = root.querySelector(".window-header") ?? root.querySelector("header.window-header") ?? root;
-  const button = document.createElement("a");
-  button.className = "mk-repos-sheet-button";
-  button.title = "MK-Repos Character Repository";
-  button.innerHTML = `<i class="fas fa-box-archive"></i>`;
-  button.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    mkReposOpenActorPanel(actor);
-  });
-
-  // Try to place before close buttons on V1/V2 sheets.
-  const close = header.querySelector(".close") ?? header.querySelector("[data-action='close']");
-  if (close?.parentElement === header) header.insertBefore(button, close);
-  else header.append(button);
-}
-
-function mkReposRegisterRenderHooks() {
-  const inject = (app, html, data) => {
-    try { mkReposInjectSheetButton(app, html, data); }
-    catch (err) { console.warn(`${MK_REPOS.MODULE_TITLE} sheet injection failed`, err); }
-  };
-
-  Hooks.on("renderActorSheet", inject);
-  Hooks.on("renderActorSheetV2", inject);
-  Hooks.on("renderDocumentSheet", inject);
-}
-
 function mkReposExposeApi() {
   game.mkRepos = {
+    openSettings: mkReposOpenSettingsPanel,
     openBrowser: mkReposOpenBrowser,
     openActorPanel: mkReposOpenActorPanel,
     pushActor: mkReposPushActor,
     pullActor: mkReposPullActor,
     pullByVaultId: mkReposPullByVaultId,
+    testConnection: mkReposTestConnection,
     status: mkReposStatus,
     buildPayload: mkReposBuildPayload
   };
@@ -753,7 +878,6 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  mkReposRegisterRenderHooks();
   mkReposExposeApi();
   console.log(`${MK_REPOS.MODULE_TITLE} | Ready v1.0.0 for Foundry ${mkReposGameVersion()} / system ${mkReposSystemId()} ${mkReposSystemVersion()}`);
 });

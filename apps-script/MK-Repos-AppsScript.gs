@@ -39,6 +39,9 @@ const MK_REPOS_SHEETS = {
   ],
   Templates: [
     'templateId', 'systemId', 'systemVersion', 'actorType', 'templateVersion', 'fieldsJson'
+  ],
+  ConnectionTests: [
+    'testId', 'createdAt', 'owner', 'systemId', 'systemVersion', 'foundryVersion', 'message'
   ]
 };
 
@@ -58,6 +61,7 @@ function doPost(e) {
     const action = String(payload.action || '').trim();
 
     if (action === 'setup') return mkReposJson(mkReposSetup());
+    if (action === 'testConnection') return mkReposJson(mkReposTestConnection(payload));
     if (action === 'list') return mkReposJson(mkReposList());
     if (action === 'get') return mkReposJson(mkReposGet(payload.vaultId));
     if (action === 'getMeta') return mkReposJson(mkReposGetMeta(payload.vaultId));
@@ -134,6 +138,33 @@ function mkReposSheet(name) {
 function mkReposSetup() {
   Object.keys(MK_REPOS_SHEETS).forEach(name => mkReposSheet(name));
   return { ok: true, version: MK_REPOS_VERSION, message: 'MK-Repos repository sheets are ready.' };
+}
+
+function mkReposTestConnection(payload) {
+  mkReposSetup();
+
+  const now = new Date().toISOString();
+  const row = {
+    testId: String(payload.testId || ('test-' + now.replace(/[^0-9]/g, ''))).trim(),
+    createdAt: now,
+    owner: payload.owner || '',
+    systemId: payload.systemId || '',
+    systemVersion: payload.systemVersion || '',
+    foundryVersion: payload.foundryVersion || '',
+    message: payload.message || 'MK-Repos connection test'
+  };
+
+  const sheet = mkReposSheet('ConnectionTests');
+  const headers = MK_REPOS_SHEETS.ConnectionTests;
+  sheet.appendRow(headers.map(h => row[h] == null ? '' : row[h]));
+
+  return {
+    ok: true,
+    version: MK_REPOS_VERSION,
+    testId: row.testId,
+    createdAt: row.createdAt,
+    message: 'Connection OK. Dummy record added.'
+  };
 }
 
 function mkReposReadTable(name) {

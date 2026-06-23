@@ -28,6 +28,7 @@ The Google Sheet is human-readable, but the full Actor JSON remains the source o
    - Google Apps Script Web App URL
    - Repository Token
    - Allowed Actor Types, default: `character`
+   - Repository Controls: open the MK-Repos push/pull and connection test panel
 
 ## Google Sheets setup
 
@@ -46,16 +47,24 @@ The Google Sheet is human-readable, but the full Actor JSON remains the source o
 
 ## Using it
 
-1. Open a player character sheet.
-2. Click the box/archive icon in the sheet header.
-3. Use:
+1. Open **Configure Settings -> Module Settings -> MK-Repos -> Repository Controls**.
+2. Click **Open MK-Repos**.
+3. Select a local character.
+4. Use:
    - **Link ID** to manually assign or inspect a character vault ID.
    - **Push** to send the PC to the repository.
    - **Pull** to overwrite the local PC from the repository.
    - **Status** to compare local and repository revisions.
    - **Repository** to list available repository characters.
+   - **Test Connection** to add a dummy row to the `ConnectionTests` sheet.
 
-You can also open the repository browser from the console or a macro:
+You can also open the settings panel from the console or a macro:
+
+```js
+game.mkRepos.openSettings();
+```
+
+Open only the repository browser from the console or a macro:
 
 ```js
 await game.mkRepos.openBrowser();
@@ -83,18 +92,13 @@ The Apps Script creates these tabs:
 - `Effects`: active effect summary and full effect JSON
 - `RawActor`: full Actor JSON in chunks
 - `Templates`: reserved for future system template builder support
+- `ConnectionTests`: dummy connection-check records
 
 ## v12-v13-v14 compatibility notes
 
-MK-Repos avoids subclassing Actor sheets or depending on system-specific sheet internals. It injects a small button into rendered Actor sheets and uses Foundry's stable document methods for Actor, Item, and ActiveEffect import/export.
+MK-Repos avoids subclassing Actor sheets or depending on system-specific sheet internals. It does not add buttons to character sheets. Push, Pull, Repository, Status, and Test Connection controls live in the module settings menu.
 
-It registers these render hooks for compatibility across sheet generations:
-
-- `renderActorSheet`
-- `renderActorSheetV2`
-- `renderDocumentSheet`
-
-The modal UI is plain DOM, not a custom Application subclass, to avoid ApplicationV1/ApplicationV2 differences.
+The modal UI is plain DOM, with a tiny settings-menu launcher so the controls appear from Foundry's Configure Settings flow.
 
 ## Known v1 limitations
 

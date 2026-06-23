@@ -1,18 +1,3 @@
-.mk-repos-sheet-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-left: 4px;
-  opacity: 0.9;
-}
-
-.mk-repos-sheet-button:hover {
-  opacity: 1;
-  text-shadow: 0 0 6px var(--color-shadow-primary, #f0c674);
-}
-
 .mk-repos-overlay {
   position: fixed;
   inset: 0;
@@ -64,6 +49,25 @@
 .mk-repos-modal-content {
   padding: 12px;
   overflow: auto;
+}
+
+.mk-repos-settings-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.mk-repos-field-label {
+  font-weight: 600;
+}
+
+.mk-repos-actor-select {
+  width: 100%;
+}
+
+.mk-repos-test-result {
+  min-height: 1.2em;
+  margin: 0;
+  opacity: 0.9;
 }
 
 .mk-repos-modal-footer {
