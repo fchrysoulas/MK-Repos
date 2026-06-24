@@ -16,6 +16,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and versioning policy.
 - Human-readable flattened character sheet fields
 - Items and Active Effects exported into separate repository tabs
 - Connection test that writes a dummy record to Google Sheets
+- Please-wait progress bar for long-running repository actions
 
 ## Installation
 
@@ -27,6 +28,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and versioning policy.
    - Google Apps Script Web App URL
    - Repository Token
    - Allowed Actor Types, defaults include `character` and `Player`
+   - Test Connection
    - Repository Controls
 
 ## Google Sheets Setup
@@ -57,7 +59,8 @@ When updating the Apps Script after it has already been deployed, open **Deploy 
    - **Pull** to overwrite the local PC from the repository.
    - **Status** to compare local and repository revisions.
    - **Repository** to list available repository characters.
-   - **Test Connection** to add a dummy row to the `ConnectionTests` sheet.
+
+Use **Test Connection** in the MK-Repos module settings, near the URL and token settings, to add a dummy row to the `ConnectionTests` sheet.
 
 If a local actor appears as **type not allowed**, add that actor type to the **Allowed Actor Types** setting. Some game systems use type names other than `character` or `Player`.
 

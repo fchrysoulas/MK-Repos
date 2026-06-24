@@ -1,8 +1,25 @@
 # Changelog
 
-All notable changes to MK-Repos are documented here.
+MK-Repos uses semantic versions. Bump the version on every update: patch for fixes, refactors, and small UI moves; minor for user-visible feature additions; major for breaking changes.
 
-MK-Repos uses semantic versions. For this project, regular user-visible updates should bump the minor version, for example `1.1.0` to `1.2.0`. Patch versions are reserved for tiny packaging or hotfix corrections that do not change behavior.
+## 1.1.3
+
+- Added a blocking please-wait overlay with an indeterminate progress bar for long-running actions.
+- Wrapped connection test, push, force-push, pull, status checks, repository listing, and repository row pull actions with progress feedback.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.1.3`.
+
+## 1.1.2
+
+- Kept the JavaScript split but flattened the new files into `scripts/`.
+- Renamed the split modules to `scripts/mk-repos-core.js` and `scripts/mk-repos-ui.js`.
+- Updated imports and version metadata to `1.1.2`.
+
+## 1.1.1
+
+- Split the monolithic `scripts/mk-repos.js` entrypoint into logical core and UI modules.
+- Kept `scripts/mk-repos.js` as the Foundry entry module for simple manifest loading.
+- Moved Test Connection out of the repository controls modal and into the main module settings list near the URL and token settings.
+- Bumped module, client script, Apps Script, manifest download URL, and bridge version values to `1.1.1`.
 
 ## 1.1.0
 
