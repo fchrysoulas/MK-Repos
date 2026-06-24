@@ -1,12 +1,13 @@
 export const MK_REPOS = {
   ID: "mk-repos",
-  VERSION: "1.1.3",
+  VERSION: "1.2.5",
   FLAG_SCOPE: "mk-repos",
   FLAG_VAULT_ID: "vaultId",
   FLAG_REVISION: "revision",
   FLAG_LAST_SYNCED_AT: "lastSyncedAt",
   FLAG_TEMPLATE_ID: "templateId",
   DEFAULT_ALLOWED_TYPES: "character,Player",
+  LEGACY_DEFAULT_ALLOWED_TYPES: "character,Player",
   MODULE_TITLE: "MK-Repos"
 };
 
@@ -76,13 +77,69 @@ export function mkReposActorTypesFromString(value) {
     .filter(Boolean);
 }
 
+function mkReposAddActorType(types, value) {
+  const type = String(value ?? "").trim();
+  if (!type) return;
+  const key = mkReposActorTypeKey(type);
+  if (!types.some(existing => mkReposActorTypeKey(existing) === key)) types.push(type);
+}
+
+export function mkReposSupportedActorTypes() {
+  const types = [];
+  const actorConfig = globalThis.CONFIG?.Actor ?? {};
+  const system = globalThis.game?.system ?? {};
+
+  const addMany = values => {
+    if (!values) return;
+    if (typeof values === "string") {
+      mkReposAddActorType(types, values);
+      return;
+    }
+    if (typeof values[Symbol.iterator] !== "function") {
+      addMany(Object.keys(values));
+      return;
+    }
+    for (const value of values) mkReposAddActorType(types, value);
+  };
+
+  addMany(system.documentTypes?.Actor);
+  addMany(Object.keys(actorConfig.typeLabels ?? {}));
+  addMany(Object.keys(actorConfig.dataModels ?? {}));
+  addMany(Object.keys(system.model?.Actor ?? {}));
+
+  if (!types.length) addMany(mkReposActorList().map(actor => actor.type));
+  if (!types.length) addMany(mkReposActorTypesFromString(MK_REPOS.LEGACY_DEFAULT_ALLOWED_TYPES));
+
+  return types.sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+export function mkReposDefaultAllowedActorTypes() {
+  return mkReposSupportedActorTypes().join(",");
+}
+
 export function mkReposAllowedTypes() {
   const raw = game.settings.get(MK_REPOS.ID, "allowedActorTypes") || "";
-  const types = [
-    ...mkReposActorTypesFromString(MK_REPOS.DEFAULT_ALLOWED_TYPES),
-    ...mkReposActorTypesFromString(raw)
-  ];
-  return new Set(types.map(mkReposActorTypeKey).filter(Boolean));
+  const requested = mkReposActorTypesFromString(raw);
+  const supported = mkReposSupportedActorTypes();
+  const supportedKeys = new Set(supported.map(mkReposActorTypeKey));
+  const legacyDefault = mkReposActorTypesFromString(MK_REPOS.LEGACY_DEFAULT_ALLOWED_TYPES)
+    .map(mkReposActorTypeKey)
+    .sort()
+    .join(",");
+  const requestedKey = requested.map(mkReposActorTypeKey).sort().join(",");
+
+  const types = (!requested.length || requestedKey === legacyDefault) ? supported : requested;
+  const filtered = supportedKeys.size
+    ? types.filter(type => supportedKeys.has(mkReposActorTypeKey(type)))
+    : types;
+  const finalTypes = filtered.length ? filtered : supported;
+
+  return new Set(finalTypes.map(mkReposActorTypeKey).filter(Boolean));
+}
+
+export function mkReposAllowedActorTypeNames() {
+  const allowed = mkReposAllowedTypes();
+  return mkReposSupportedActorTypes().filter(type => allowed.has(mkReposActorTypeKey(type)));
 }
 
 export function mkReposIsCharacterActor(actor) {

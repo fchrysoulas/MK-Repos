@@ -1,5 +1,5 @@
 /*
- * MK-Repos v1.1.3
+ * MK-Repos v1.2.5
  * Foundry VTT v12-v14 compatible character repository bridge.
  */
 
@@ -12,12 +12,15 @@ import {
   mkReposPullByVaultId,
   mkReposPushActor,
   mkReposStatus,
+  mkReposDefaultAllowedActorTypes,
+  mkReposSupportedActorTypes,
   mkReposSystemId,
   mkReposSystemVersion,
   mkReposTestConnection
 } from "./mk-repos-core.js";
 
 import {
+  mkReposOpenAllowedActorTypesPanel,
   mkReposOpenActorPanel,
   mkReposOpenBrowser,
   mkReposOpenSettingsPanel,
@@ -55,6 +58,8 @@ function mkReposConnectionTestMenuClass() {
 }
 
 function mkReposRegisterSettings() {
+  const supportedActorTypes = mkReposSupportedActorTypes();
+
   game.settings.register(MK_REPOS.ID, "appsScriptUrl", {
     name: "Google Apps Script Web App URL",
     hint: "Paste the /exec deployment URL for the MK-Repos Apps Script bridge.",
@@ -83,11 +88,20 @@ function mkReposRegisterSettings() {
 
   game.settings.register(MK_REPOS.ID, "allowedActorTypes", {
     name: "Allowed Actor Types",
-    hint: "Comma-separated Actor types that MK-Repos may push/pull. Defaults include character and Player.",
+    hint: `Comma-separated Actor types that MK-Repos may push/pull. Supported by this system: ${supportedActorTypes.join(", ") || "unknown"}.`,
     scope: "world",
-    config: true,
+    config: false,
     type: String,
-    default: MK_REPOS.DEFAULT_ALLOWED_TYPES
+    default: mkReposDefaultAllowedActorTypes()
+  });
+
+  game.settings.registerMenu(MK_REPOS.ID, "allowedActorTypesMenu", {
+    name: "Allowed Actor Types",
+    label: "Configure Types",
+    hint: `Choose which system Actor types MK-Repos may push, pull, and show. Supported by this system: ${supportedActorTypes.join(", ") || "unknown"}.`,
+    icon: "fas fa-users-cog",
+    type: mkReposMenuClass(mkReposOpenAllowedActorTypesPanel),
+    restricted: false
   });
 
   game.settings.register(MK_REPOS.ID, "preserveOwnershipOnImport", {
@@ -102,7 +116,7 @@ function mkReposRegisterSettings() {
   game.settings.registerMenu(MK_REPOS.ID, "repositoryControls", {
     name: "Repository Controls",
     label: "Open MK-Repos",
-    hint: "Push, pull, browse repository characters, and inspect local repository status.",
+    hint: "Open the actor repository grid with row-level Push and Pull controls.",
     icon: "fas fa-box-archive",
     type: mkReposMenuClass(mkReposOpenSettingsPanel),
     restricted: false

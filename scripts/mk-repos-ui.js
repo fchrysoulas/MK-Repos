@@ -1,18 +1,15 @@
 import {
   MK_REPOS,
-  mkReposApi,
+  mkReposActorTypeKey,
+  mkReposAllowedActorTypeNames,
+  mkReposActorList,
   mkReposActorById,
   mkReposEscapeHtml,
-  mkReposFindActorByVaultId,
-  mkReposGetTemplateId,
   mkReposIsCharacterActor,
   mkReposNotify,
   mkReposPullActor,
-  mkReposPullByVaultId,
   mkReposPushActor,
-  mkReposRandomId,
-  mkReposSelectableActors,
-  mkReposStatus,
+  mkReposSupportedActorTypes,
   mkReposSystemId,
   mkReposSystemVersion,
   mkReposTestConnection,
@@ -26,7 +23,19 @@ function mkReposProgressFrame() {
   });
 }
 
+function mkReposRemoveElement(element) {
+  if (!element) return;
+  if (typeof element.remove === "function") element.remove();
+  else element.parentNode?.removeChild?.(element);
+}
+
+export function mkReposCloseProgressOverlays() {
+  document.querySelectorAll(".mk-repos-progress-overlay").forEach(mkReposRemoveElement);
+}
+
 export function mkReposShowProgress(message) {
+  mkReposCloseProgressOverlays();
+
   const overlay = document.createElement("div");
   overlay.className = "mk-repos-progress-overlay";
   overlay.innerHTML = `
@@ -46,7 +55,7 @@ export function mkReposShowProgress(message) {
       if (messageEl) messageEl.textContent = String(nextMessage ?? "");
     },
     close() {
-      overlay.remove();
+      mkReposRemoveElement(overlay);
     }
   };
 }
@@ -55,9 +64,11 @@ export async function mkReposWithProgress(message, callback) {
   const progress = mkReposShowProgress(message);
   try {
     await mkReposProgressFrame();
-    return await callback(progress);
+    return await Promise.resolve(callback(progress));
   } finally {
     progress.close();
+    mkReposCloseProgressOverlays();
+    setTimeout(mkReposCloseProgressOverlays, 0);
   }
 }
 
@@ -113,18 +124,48 @@ export function mkReposConfirm(message) {
   return Promise.resolve(window.confirm(message));
 }
 
-export function mkReposPrompt(message, defaultValue = "") {
-  return Promise.resolve(window.prompt(message, defaultValue));
+export function mkReposAllowedActorTypesPanelHtml() {
+  const supported = mkReposSupportedActorTypes();
+  const allowed = new Set(mkReposAllowedActorTypeNames().map(mkReposActorTypeKey));
+  const rows = supported.length ? supported.map(type => {
+    const id = `mk-repos-actor-type-${mkReposActorTypeKey(type).replace(/[^a-z0-9_-]+/g, "-")}`;
+    return `
+      <label class="mk-repos-check-row" for="${mkReposEscapeHtml(id)}">
+        <input id="${mkReposEscapeHtml(id)}" type="checkbox" data-mk-repos-actor-type="${mkReposEscapeHtml(type)}" ${allowed.has(mkReposActorTypeKey(type)) ? "checked" : ""}>
+        <span>${mkReposEscapeHtml(type)}</span>
+      </label>
+    `;
+  }).join("") : `<p class="mk-repos-help">This system did not report any Actor types.</p>`;
+
+  return `
+    <div class="mk-repos-settings-panel">
+      <p class="mk-repos-help">Choose which Actor types MK-Repos may push, pull, and show in the repository grid.</p>
+      <div class="mk-repos-check-list">${rows}</div>
+    </div>
+  `;
 }
 
-export async function mkReposLinkActor(actor) {
-  const existing = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || mkReposRandomId();
-  const vaultId = await mkReposPrompt("Vault ID for this character", existing);
-  if (!vaultId) return null;
-  await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID, vaultId.trim());
-  await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_TEMPLATE_ID, mkReposGetTemplateId(actor));
-  mkReposNotify(`Linked ${actor.name} to ${vaultId.trim()}.`);
-  return vaultId.trim();
+export function mkReposOpenAllowedActorTypesPanel() {
+  return mkReposModal({
+    title: "Allowed Actor Types",
+    content: mkReposAllowedActorTypesPanelHtml(),
+    buttons: [
+      {
+        label: "Save",
+        icon: "fas fa-save",
+        callback: async (event, modal) => {
+          const selected = Array.from(modal.querySelectorAll("[data-mk-repos-actor-type]:checked"))
+            .map(input => input.dataset.mkReposActorType)
+            .filter(Boolean);
+          if (!selected.length) throw new Error("Choose at least one Actor type.");
+          await game.settings.set(MK_REPOS.ID, "allowedActorTypes", selected.join(","));
+          if (mkReposRepositoryApp?.render) await mkReposRenderRepositoryApp(mkReposRepositoryApp);
+          mkReposNotify(`Allowed Actor Types saved: ${selected.join(", ")}.`);
+        }
+      },
+      { label: "Cancel", icon: "fas fa-xmark" }
+    ]
+  });
 }
 
 export async function mkReposPushActorWithPrompt(actor) {
@@ -154,243 +195,221 @@ export async function mkReposPullActorWithPrompt(actor) {
   return result;
 }
 
-export async function mkReposNotifyActorStatus(actor) {
-  const status = await mkReposWithProgress(`Checking ${actor.name} status...`, () => mkReposStatus(actor));
-  if (!status.linked) {
-    mkReposNotify(`${actor.name} is not linked to the repository.`, "warn");
-    return status;
-  }
-  const state = status.localRevision === status.remoteRevision ? "Synced" : "Different revisions";
-  mkReposNotify(`${state}. Local ${status.localRevision}, repository ${status.remoteRevision}.`);
-  return status;
+function mkReposActorId(actor) {
+  return actor?.id ?? actor?._id ?? actor?.uuid ?? "";
 }
 
-export function mkReposActorStatusHtml(actor) {
-  const vaultId = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || "Not linked";
-  const revision = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_REVISION) ?? "-";
-  const lastSynced = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_LAST_SYNCED_AT) || "Never";
-  const templateId = mkReposGetTemplateId(actor);
-
-  return `
-    <div class="mk-repos-status-grid">
-      <div><strong>Actor</strong></div><div>${mkReposEscapeHtml(actor.name)}</div>
-      <div><strong>Type</strong></div><div>${mkReposEscapeHtml(actor.type)}</div>
-      <div><strong>System</strong></div><div>${mkReposEscapeHtml(mkReposSystemId())} ${mkReposEscapeHtml(mkReposSystemVersion())}</div>
-      <div><strong>Vault ID</strong></div><div><code>${mkReposEscapeHtml(vaultId)}</code></div>
-      <div><strong>Local Revision</strong></div><div>${mkReposEscapeHtml(revision)}</div>
-      <div><strong>Template</strong></div><div><code>${mkReposEscapeHtml(templateId)}</code></div>
-      <div><strong>Last Synced</strong></div><div>${mkReposEscapeHtml(lastSynced)}</div>
-    </div>
-    <p class="mk-repos-help">V1 stores full Actor JSON plus flattened sheet fields, items, and effects in Google Sheets. Push/Pull is manual to avoid accidental overwrites.</p>
-  `;
+function mkReposElapsedHours(value) {
+  if (!value) return "Never";
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "Unknown";
+  const hours = Math.max(0, Date.now() - timestamp) / 3600000;
+  return hours.toFixed(2);
 }
 
-export function mkReposOpenActorPanel(actor) {
-  if (!mkReposIsCharacterActor(actor)) {
-    mkReposNotify(`Actor type '${actor.type}' is not enabled for MK-Repos.`, "warn");
-    return;
-  }
+function mkReposRepositoryActors() {
+  return mkReposActorList().filter(mkReposIsCharacterActor).sort((a, b) => {
+    const aUsable = mkReposUserCanUseActor(a) ? 0 : 1;
+    const bUsable = mkReposUserCanUseActor(b) ? 0 : 1;
+    if (aUsable !== bUsable) return aUsable - bUsable;
 
-  mkReposModal({
-    title: `MK-Repos: ${actor.name}`,
-    content: mkReposActorStatusHtml(actor),
-    buttons: [
-      {
-        label: "Link ID",
-        icon: "fas fa-link",
-        close: false,
-        callback: () => mkReposLinkActor(actor)
-      },
-      {
-        label: "Push",
-        icon: "fas fa-upload",
-        callback: () => mkReposPushActorWithPrompt(actor)
-      },
-      {
-        label: "Pull",
-        icon: "fas fa-download",
-        callback: () => mkReposPullActorWithPrompt(actor)
-      },
-      {
-        label: "Status",
-        icon: "fas fa-circle-info",
-        close: false,
-        callback: () => mkReposNotifyActorStatus(actor)
-      },
-      {
-        label: "Repository",
-        icon: "fas fa-box-archive",
-        callback: () => mkReposOpenBrowser()
-      }
-    ]
+    return String(a.name ?? "").localeCompare(String(b.name ?? ""));
   });
 }
 
-export function mkReposSettingsPanelHtml() {
-  const actors = mkReposSelectableActors();
-  const options = actors.length ? actors.map(actor => {
-    const notes = [];
-    if (!mkReposIsCharacterActor(actor)) notes.push("type not allowed");
-    if (!mkReposUserCanUseActor(actor)) notes.push("not owned");
-    const noteText = notes.length ? ` - ${notes.join(", ")}` : "";
-    const actorId = actor.id ?? actor._id ?? actor.uuid ?? "";
+function mkReposRowActionDisabled(actor, action) {
+  if (!mkReposIsCharacterActor(actor)) return `disabled title="Actor type is not allowed"`;
+  if (!mkReposUserCanUseActor(actor)) return `disabled title="You do not own this Actor"`;
+  if (action === "pull" && !actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID)) return `disabled title="Push once first to create a Vault ID"`;
+  return "";
+}
+
+function mkReposRepositoryGridHtml() {
+  const actors = mkReposRepositoryActors();
+  const rows = actors.length ? actors.map(actor => {
+    const actorId = mkReposActorId(actor);
+    const vaultId = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || "";
+    const localRevision = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_REVISION) ?? "-";
+    const lastSynced = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_LAST_SYNCED_AT) || "";
+    const lastSyncedLabel = mkReposElapsedHours(lastSynced);
+    const rowClasses = [
+      !mkReposIsCharacterActor(actor) ? "mk-repos-row-disabled" : "",
+      !mkReposUserCanUseActor(actor) ? "mk-repos-row-disabled" : ""
+    ].filter(Boolean).join(" ");
+
     return `
-      <option value="${mkReposEscapeHtml(actorId)}">${mkReposEscapeHtml(actor.name)} (${mkReposEscapeHtml(actor.type)})${mkReposEscapeHtml(noteText)}</option>
+      <tr class="${mkReposEscapeHtml(rowClasses)}" data-actor-id="${mkReposEscapeHtml(actorId)}">
+        <td class="mk-repos-cell-actor"><strong>${mkReposEscapeHtml(actor.name)}</strong></td>
+        <td>${mkReposEscapeHtml(actor.type)}</td>
+        <td>${mkReposEscapeHtml(mkReposSystemId())} ${mkReposEscapeHtml(mkReposSystemVersion())}</td>
+        <td><code>${vaultId ? mkReposEscapeHtml(vaultId) : "-"}</code></td>
+        <td>${mkReposEscapeHtml(localRevision)}</td>
+        <td title="${mkReposEscapeHtml(lastSynced || "Never")}">${mkReposEscapeHtml(lastSyncedLabel)}</td>
+        <td class="mk-repos-actions">
+          <button type="button" data-mk-repos-action="push" data-actor-id="${mkReposEscapeHtml(actorId)}" ${mkReposRowActionDisabled(actor, "push")}>Push</button>
+          <button type="button" data-mk-repos-action="pull" data-actor-id="${mkReposEscapeHtml(actorId)}" ${mkReposRowActionDisabled(actor, "pull")}>Pull</button>
+        </td>
+      </tr>
     `;
-  }).join("") : `<option value="">No local actors found</option>`;
+  }).join("") : `<tr><td colspan="7" class="mk-repos-empty">No allowed local actors found.</td></tr>`;
 
   return `
-    <div class="mk-repos-settings-panel">
-      <label class="mk-repos-field-label" for="mk-repos-actor-select">Local Character</label>
-      <select id="mk-repos-actor-select" class="mk-repos-actor-select" ${actors.length ? "" : "disabled"}>
-        ${options}
-      </select>
-      <div class="mk-repos-selected-status"></div>
-      <p class="mk-repos-help">Use the module settings controls to manually push or pull character repository data.</p>
-    </div>
+    <section class="mk-repos-repository-view">
+      <div class="mk-repos-grid-toolbar">
+        <input type="search" class="mk-repos-grid-search" placeholder="Search actors..." aria-label="Search actors">
+      </div>
+      <div class="mk-repos-grid-scroll">
+        <table class="mk-repos-actor-grid">
+          <thead>
+            <tr>
+              <th>Actor</th>
+              <th>Type</th>
+              <th>System</th>
+              <th>Vault ID</th>
+              <th>LR</th>
+              <th>Last Synced (h)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>
   `;
 }
 
-export function mkReposSelectedSettingsActor(overlay) {
-  const actorId = overlay.querySelector(".mk-repos-actor-select")?.value;
-  const actor = mkReposActorById(actorId);
-  if (!actor) throw new Error("Choose a local character first.");
-  return actor;
+function mkReposContentElement(content) {
+  if (content instanceof HTMLElement) return content;
+  if (content?.[0] instanceof HTMLElement) return content[0];
+  return null;
 }
 
-export function mkReposRefreshSettingsActorStatus(overlay) {
-  const status = overlay.querySelector(".mk-repos-selected-status");
-  if (!status) return;
+function mkReposRepositoryApplicationClass() {
+  const BaseApplication = globalThis.foundry?.applications?.api?.ApplicationV2;
+  if (!BaseApplication) return null;
 
-  const actorId = overlay.querySelector(".mk-repos-actor-select")?.value;
-  const actor = mkReposActorById(actorId);
-  if (!actor) {
-    status.innerHTML = `<p class="mk-repos-help">No local actors are available in this world.</p>`;
-    return;
-  }
-
-  const warnings = [];
-  if (!mkReposIsCharacterActor(actor)) {
-    warnings.push(`Actor type '${actor.type}' is not in Allowed Actor Types. Add '${actor.type}' to that module setting if this is your system's character type.`);
-  }
-  if (!mkReposUserCanUseActor(actor)) warnings.push("You do not own this Actor, so push and pull actions will be blocked.");
-
-  status.innerHTML = `
-    ${mkReposActorStatusHtml(actor)}
-    ${warnings.map(message => `<p class="mk-repos-warning">${mkReposEscapeHtml(message)}</p>`).join("")}
-  `;
-}
-
-export function mkReposOpenSettingsPanel() {
-  const overlay = mkReposModal({
-    title: "MK-Repos Settings",
-    width: 760,
-    content: mkReposSettingsPanelHtml(),
-    buttons: [
-      {
-        label: "Link ID",
-        icon: "fas fa-link",
-        close: false,
-        callback: async (event, modal) => {
-          await mkReposLinkActor(mkReposSelectedSettingsActor(modal));
-          mkReposRefreshSettingsActorStatus(modal);
-        }
-      },
-      {
-        label: "Push",
-        icon: "fas fa-upload",
-        close: false,
-        callback: async (event, modal) => {
-          await mkReposPushActorWithPrompt(mkReposSelectedSettingsActor(modal));
-          mkReposRefreshSettingsActorStatus(modal);
-        }
-      },
-      {
-        label: "Pull",
-        icon: "fas fa-download",
-        close: false,
-        callback: async (event, modal) => {
-          await mkReposPullActorWithPrompt(mkReposSelectedSettingsActor(modal));
-          mkReposRefreshSettingsActorStatus(modal);
-        }
-      },
-      {
-        label: "Status",
-        icon: "fas fa-circle-info",
-        close: false,
-        callback: async (event, modal) => {
-          await mkReposNotifyActorStatus(mkReposSelectedSettingsActor(modal));
-          mkReposRefreshSettingsActorStatus(modal);
-        }
-      },
-      {
-        label: "Repository",
+  return class MKReposRepositoryApplication extends BaseApplication {
+    static DEFAULT_OPTIONS = {
+      id: "mk-repos-repository-controls",
+      classes: ["mk-repos-application"],
+      tag: "section",
+      window: {
+        title: "MK-Repos Sync",
         icon: "fas fa-box-archive",
-        callback: () => mkReposOpenBrowser()
+        resizable: true
+      },
+      position: {
+        width: 1180,
+        height: 600
       }
-    ]
-  });
+    };
 
-  overlay.querySelector(".mk-repos-actor-select")?.addEventListener("change", () => mkReposRefreshSettingsActorStatus(overlay));
-  mkReposRefreshSettingsActorStatus(overlay);
-  return overlay;
+    async _renderHTML(context, options) {
+      return mkReposRepositoryGridHtml();
+    }
+
+    _replaceHTML(result, content, options) {
+      const root = mkReposContentElement(content);
+      if (!root) return;
+      root.innerHTML = result;
+      mkReposActivateRepositoryGrid(root, this);
+    }
+  };
 }
 
-export async function mkReposOpenBrowser() {
-  let result;
+let mkReposRepositoryApp = null;
+let mkReposRepositoryAppClass = null;
+
+function mkReposRenderRepositoryApp(app) {
   try {
-    result = await mkReposWithProgress("Loading repository characters...", () => mkReposApi({ action: "list" }));
+    return app.render({ force: true });
   } catch (err) {
-    mkReposNotify(err.message ?? err, "error");
+    return app.render(true);
+  }
+}
+
+async function mkReposRefreshRepositoryGrid(root, app) {
+  if (app?.render) {
+    await mkReposRenderRepositoryApp(app);
     return;
   }
 
-  const characters = result.characters ?? [];
-  const rows = characters.length ? characters.map(ch => `
-    <tr data-vault-id="${mkReposEscapeHtml(ch.vaultId)}">
-      <td><strong>${mkReposEscapeHtml(ch.name)}</strong></td>
-      <td>${mkReposEscapeHtml(ch.systemId)} ${mkReposEscapeHtml(ch.systemVersion)}</td>
-      <td>${mkReposEscapeHtml(ch.level)}</td>
-      <td>${mkReposEscapeHtml(ch.className)}</td>
-      <td>${mkReposEscapeHtml(ch.revision)}</td>
-      <td>${mkReposEscapeHtml(ch.updatedAt)}</td>
-      <td><button type="button" class="mk-repos-row-pull" data-vault-id="${mkReposEscapeHtml(ch.vaultId)}"><i class="fas fa-download"></i></button></td>
-    </tr>
-  `).join("") : `<tr><td colspan="7">No characters found in repository.</td></tr>`;
+  const current = root?.querySelector?.(".mk-repos-repository-view");
+  if (!current) return;
+  current.outerHTML = mkReposRepositoryGridHtml();
+  mkReposActivateRepositoryGrid(root, app);
+}
 
-  const overlay = mkReposModal({
-    title: "MK-Repos Repository",
-    width: 900,
-    content: `
-      <table class="mk-repos-table">
-        <thead>
-          <tr><th>Name</th><th>System</th><th>LV</th><th>Class</th><th>Rev</th><th>Updated</th><th></th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `,
-    buttons: [
-      { label: "Close", icon: "fas fa-xmark" }
-    ]
+async function mkReposHandleRepositoryAction(action, actor, root, app) {
+  if (action === "push") {
+    await mkReposPushActorWithPrompt(actor);
+    await mkReposRefreshRepositoryGrid(root, app);
+    return;
+  }
+
+  if (action === "pull") {
+    await mkReposPullActorWithPrompt(actor);
+    await mkReposRefreshRepositoryGrid(root, app);
+  }
+}
+
+function mkReposActivateRepositoryGrid(root, app) {
+  const search = root.querySelector(".mk-repos-grid-search");
+  search?.addEventListener("input", event => {
+    const query = String(event.currentTarget.value || "").trim().toLowerCase();
+    root.querySelectorAll(".mk-repos-actor-grid tbody tr").forEach(row => {
+      if (row.classList.contains("mk-repos-empty")) return;
+      row.hidden = query ? !row.textContent.toLowerCase().includes(query) : false;
+    });
   });
 
-  overlay.querySelectorAll(".mk-repos-row-pull").forEach(button => {
+  root.querySelectorAll("[data-mk-repos-action]").forEach(button => {
     button.addEventListener("click", async event => {
-      const vaultId = event.currentTarget.dataset.vaultId;
-      const existing = mkReposFindActorByVaultId(vaultId);
-      const message = existing
-        ? `Pull repository character into existing local Actor '${existing.name}'?`
-        : "Create this repository character as a new local Actor?";
-      const proceed = await mkReposConfirm(message);
-      if (!proceed) return;
+      const target = event.currentTarget;
+      const actor = mkReposActorById(target.dataset.actorId);
+      const action = target.dataset.mkReposAction;
+      if (!actor || !action) return;
+
       try {
-        const result = await mkReposWithProgress("Pulling repository character...", () => mkReposPullByVaultId(vaultId, { targetActor: existing }));
-        mkReposNotify(`Pulled ${result.actor.name}. Revision ${result.revision}.`);
-        overlay.remove();
+        await mkReposHandleRepositoryAction(action, actor, root, app);
       } catch (err) {
-        console.error(`${MK_REPOS.MODULE_TITLE} pull failed`, err);
+        console.error(`${MK_REPOS.MODULE_TITLE} repository action failed`, err);
         mkReposNotify(err.message ?? err, "error");
       }
     });
   });
+}
+
+function mkReposOpenRepositoryModalFallback() {
+  const overlay = mkReposModal({
+    title: "MK-Repos Repository",
+    width: 1180,
+    content: mkReposRepositoryGridHtml(),
+    buttons: [
+      { label: "Close", icon: "fas fa-xmark" }
+    ]
+  });
+  mkReposActivateRepositoryGrid(overlay, null);
+  return overlay;
+}
+
+export function mkReposOpenRepositoryApp() {
+  mkReposRepositoryAppClass ??= mkReposRepositoryApplicationClass();
+  if (!mkReposRepositoryAppClass) return mkReposOpenRepositoryModalFallback();
+
+  mkReposRepositoryApp ??= new mkReposRepositoryAppClass();
+  mkReposRenderRepositoryApp(mkReposRepositoryApp);
+  return mkReposRepositoryApp;
+}
+
+export function mkReposOpenActorPanel(actor) {
+  return mkReposOpenRepositoryApp();
+}
+
+export function mkReposOpenSettingsPanel() {
+  return mkReposOpenRepositoryApp();
+}
+
+export function mkReposOpenBrowser() {
+  return mkReposOpenRepositoryApp();
 }

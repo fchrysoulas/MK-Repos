@@ -27,7 +27,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and versioning policy.
 4. Configure the module settings:
    - Google Apps Script Web App URL
    - Repository Token
-   - Allowed Actor Types, defaults include `character` and `Player`
+   - Allowed Actor Types, a checkbox list populated from the active game system
    - Test Connection
    - Repository Controls
 
@@ -52,17 +52,13 @@ When updating the Apps Script after it has already been deployed, open **Deploy 
 
 1. Open **Configure Settings -> Module Settings -> MK-Repos -> Repository Controls**.
 2. Click **Open MK-Repos**.
-3. Select a local character.
-4. Use:
-   - **Link ID** to manually assign or inspect a character vault ID.
-   - **Push** to send the PC to the repository.
-   - **Pull** to overwrite the local PC from the repository.
-   - **Status** to compare local and repository revisions.
-   - **Repository** to list available repository characters.
+3. Search or scan the actor grid to inspect local repository status and push or pull each actor from its row.
+
+The grid shows Actor, Type, System, Vault ID, LR, and Last Synced as elapsed hours with two decimal places. It only lists local actors whose type is enabled in **Allowed Actor Types**.
 
 Use **Test Connection** in the MK-Repos module settings, near the URL and token settings, to add a dummy row to the `ConnectionTests` sheet.
 
-If a local actor appears as **type not allowed**, add that actor type to the **Allowed Actor Types** setting. Some game systems use type names other than `character` or `Player`.
+The **Allowed Actor Types** setting uses the Actor types reported by the active game system. Open **Configure Types** to choose which types MK-Repos may sync.
 
 ## Macros
 

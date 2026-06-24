@@ -2,6 +2,48 @@
 
 MK-Repos uses semantic versions. Bump the version on every update: patch for fixes, refactors, and small UI moves; minor for user-visible feature additions; major for breaking changes.
 
+## 1.2.5
+
+- Changed the Repository Controls grid Last Synced column to show elapsed hours as a two-decimal value.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.2.5`.
+
+## 1.2.4
+
+- Replaced the raw Allowed Actor Types textbox with a checkbox picker populated from the active game system's Actor types.
+- Filtered the Repository Controls actor grid so it only shows actors whose type is enabled in Allowed Actor Types.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.2.4`.
+
+## 1.2.3
+
+- Removed the Template column from the Repository Controls actor grid.
+- Fixed grid header overlap by separating the search toolbar from the scrollable table area.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.2.3`.
+
+## 1.2.2
+
+- Added a search field above the Repository Controls actor grid.
+- Tightened actor grid rows with `line-height: 0.5`.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.2.2`.
+
+## 1.2.1
+
+- Changed the Repository Controls grid Last Synced value to show total elapsed minutes instead of `hours:minutes`.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.2.1`.
+
+## 1.2.0
+
+- Reworked Repository Controls into an actor grid interface built on Foundry ApplicationV2 when available.
+- The grid lists all local actors with Actor, Type, System, Vault ID, LR, Template, and elapsed Last Synced columns.
+- Added row-level Push and Pull buttons directly in the actor grid.
+- Redirected older actor panel, settings panel, and browser entrypoints to the new grid so repository work happens in one place.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.2.0`.
+
+## 1.1.4
+
+- Made progress overlay cleanup more defensive so please-wait overlays are removed after actions finish.
+- Removed stale progress overlays before starting a new action.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.1.4`.
+
 ## 1.1.3
 
 - Added a blocking please-wait overlay with an indeterminate progress bar for long-running actions.

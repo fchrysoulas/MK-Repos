@@ -51,49 +51,117 @@
   overflow: auto;
 }
 
-.mk-repos-settings-panel {
-  display: grid;
-  gap: 10px;
-}
-
-.mk-repos-field-label {
-  font-weight: 600;
-}
-
-.mk-repos-actor-select {
-  width: 100%;
-}
-
 .mk-repos-modal-footer {
   justify-content: flex-end;
   flex-wrap: wrap;
 }
 
-.mk-repos-button,
-.mk-repos-row-pull {
+.mk-repos-button {
   cursor: pointer;
 }
 
-.mk-repos-status-grid {
+.mk-repos-settings-panel {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px 14px;
-  align-items: baseline;
+  gap: 10px;
 }
 
-.mk-repos-status-grid code {
+.mk-repos-help {
+  margin: 0;
+  opacity: 0.85;
+}
+
+.mk-repos-check-list {
+  display: grid;
+  gap: 6px;
+}
+
+.mk-repos-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mk-repos-application .window-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.mk-repos-repository-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mk-repos-grid-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.48);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.mk-repos-grid-search {
+  width: min(420px, 100%);
+}
+
+.mk-repos-grid-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.mk-repos-actor-grid {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  line-height: 0.5;
+}
+
+.mk-repos-actor-grid th,
+.mk-repos-actor-grid td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.mk-repos-actor-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+.mk-repos-actor-grid code {
   user-select: all;
   word-break: break-all;
 }
 
-.mk-repos-help {
-  margin-top: 12px;
-  opacity: 0.85;
+.mk-repos-cell-actor {
+  min-width: 150px;
 }
 
-.mk-repos-warning {
-  margin: 8px 0 0;
-  color: var(--color-level-warning, #f0c674);
+.mk-repos-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.mk-repos-actions button {
+  min-width: 56px;
+}
+
+.mk-repos-row-disabled {
+  opacity: 0.62;
+}
+
+.mk-repos-empty {
+  padding: 18px;
+  text-align: center;
+  opacity: 0.8;
 }
 
 .mk-repos-progress-overlay {
@@ -153,23 +221,4 @@
   100% {
     transform: translateX(240%);
   }
-}
-
-.mk-repos-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.mk-repos-table th,
-.mk-repos-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.mk-repos-table th {
-  position: sticky;
-  top: 0;
-  background: rgba(0, 0, 0, 0.35);
 }
