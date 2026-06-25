@@ -2,6 +2,14 @@
 
 MK-Repos uses semantic versions. Bump the version on every update: patch for fixes, refactors, and small UI moves; minor for user-visible feature additions; major for breaking changes.
 
+## 1.3.0
+
+- Added remote repository records to the Repository Controls grid by reading the Apps Script `list` action.
+- Added an Import row action for actors that exist in the Google Sheets repository but not in the current Foundry world.
+- Added a Refresh button for reloading local and remote repository rows.
+- Added `game.mkRepos.listRepository()` for console/macros.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.3.0`.
+
 ## 1.2.5
 
 - Changed the Repository Controls grid Last Synced column to show elapsed hours as a two-decimal value.

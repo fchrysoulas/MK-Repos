@@ -1,5 +1,5 @@
 /*
- * MK-Repos v1.2.5
+ * MK-Repos v1.3.0
  * Foundry VTT v12-v14 compatible character repository bridge.
  */
 
@@ -8,6 +8,7 @@ import {
   mkReposBuildPayload,
   mkReposGameVersion,
   mkReposNotify,
+  mkReposListRepository,
   mkReposPullActor,
   mkReposPullByVaultId,
   mkReposPushActor,
@@ -131,6 +132,7 @@ function mkReposExposeApi() {
     pushActor: mkReposPushActor,
     pullActor: mkReposPullActor,
     pullByVaultId: mkReposPullByVaultId,
+    listRepository: mkReposListRepository,
     testConnection: mkReposTestConnection,
     status: mkReposStatus,
     buildPayload: mkReposBuildPayload

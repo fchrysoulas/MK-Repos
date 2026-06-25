@@ -1,6 +1,6 @@
 export const MK_REPOS = {
   ID: "mk-repos",
-  VERSION: "1.2.5",
+  VERSION: "1.3.0",
   FLAG_SCOPE: "mk-repos",
   FLAG_VAULT_ID: "vaultId",
   FLAG_REVISION: "revision",
@@ -500,6 +500,11 @@ export async function mkReposPushActor(actor, { force = false } = {}) {
   await actor.setFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_TEMPLATE_ID, payload.metadata.templateId);
 
   return { ...result, vaultId: payload.vaultId, revision: newRevision };
+}
+
+export async function mkReposListRepository() {
+  const result = await mkReposApi({ action: "list" });
+  return Array.isArray(result.characters) ? result.characters : [];
 }
 
 export async function mkReposPullByVaultId(vaultId, { targetActor = null } = {}) {

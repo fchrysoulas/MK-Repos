@@ -6,8 +6,10 @@ import {
   mkReposActorById,
   mkReposEscapeHtml,
   mkReposIsCharacterActor,
+  mkReposListRepository,
   mkReposNotify,
   mkReposPullActor,
+  mkReposPullByVaultId,
   mkReposPushActor,
   mkReposSupportedActorTypes,
   mkReposSystemId,
@@ -199,6 +201,14 @@ function mkReposActorId(actor) {
   return actor?.id ?? actor?._id ?? actor?.uuid ?? "";
 }
 
+function mkReposRepositoryVaultId(character) {
+  return String(character?.vaultId ?? "").trim();
+}
+
+function mkReposRepositoryActorType(character) {
+  return String(character?.actorType ?? character?.type ?? "").trim();
+}
+
 function mkReposElapsedHours(value) {
   if (!value) return "Never";
   const timestamp = Date.parse(value);
@@ -217,6 +227,21 @@ function mkReposRepositoryActors() {
   });
 }
 
+async function mkReposRepositoryData() {
+  try {
+    return {
+      remoteCharacters: await mkReposListRepository(),
+      remoteError: ""
+    };
+  } catch (err) {
+    console.warn(`${MK_REPOS.MODULE_TITLE} repository list failed`, err);
+    return {
+      remoteCharacters: [],
+      remoteError: err.message ?? String(err)
+    };
+  }
+}
+
 function mkReposRowActionDisabled(actor, action) {
   if (!mkReposIsCharacterActor(actor)) return `disabled title="Actor type is not allowed"`;
   if (!mkReposUserCanUseActor(actor)) return `disabled title="You do not own this Actor"`;
@@ -224,12 +249,41 @@ function mkReposRowActionDisabled(actor, action) {
   return "";
 }
 
-function mkReposRepositoryGridHtml() {
+function mkReposImportActionDisabled(character) {
+  if (!mkReposIsCharacterActor({ type: mkReposRepositoryActorType(character) })) return `disabled title="Actor type is not allowed"`;
+  return "";
+}
+
+function mkReposRemoteCharacterMap(remoteCharacters) {
+  const map = new Map();
+  for (const character of remoteCharacters) {
+    const vaultId = mkReposRepositoryVaultId(character);
+    if (vaultId) map.set(vaultId, character);
+  }
+  return map;
+}
+
+function mkReposRepositoryRemoteOnlyRows(remoteCharacters, usedVaultIds) {
+  return remoteCharacters
+    .filter(character => {
+      const vaultId = mkReposRepositoryVaultId(character);
+      return vaultId && !usedVaultIds.has(vaultId);
+    })
+    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+}
+
+async function mkReposRepositoryGridHtml() {
+  const { remoteCharacters, remoteError } = await mkReposRepositoryData();
+  const remoteByVaultId = mkReposRemoteCharacterMap(remoteCharacters);
+  const usedVaultIds = new Set();
   const actors = mkReposRepositoryActors();
   const rows = actors.length ? actors.map(actor => {
     const actorId = mkReposActorId(actor);
     const vaultId = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || "";
+    if (vaultId) usedVaultIds.add(vaultId);
+    const remote = vaultId ? remoteByVaultId.get(vaultId) : null;
     const localRevision = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_REVISION) ?? "-";
+    const repositoryRevision = remote?.revision ?? "-";
     const lastSynced = actor.getFlag(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_LAST_SYNCED_AT) || "";
     const lastSyncedLabel = mkReposElapsedHours(lastSynced);
     const rowClasses = [
@@ -244,6 +298,7 @@ function mkReposRepositoryGridHtml() {
         <td>${mkReposEscapeHtml(mkReposSystemId())} ${mkReposEscapeHtml(mkReposSystemVersion())}</td>
         <td><code>${vaultId ? mkReposEscapeHtml(vaultId) : "-"}</code></td>
         <td>${mkReposEscapeHtml(localRevision)}</td>
+        <td>${mkReposEscapeHtml(repositoryRevision)}</td>
         <td title="${mkReposEscapeHtml(lastSynced || "Never")}">${mkReposEscapeHtml(lastSyncedLabel)}</td>
         <td class="mk-repos-actions">
           <button type="button" data-mk-repos-action="push" data-actor-id="${mkReposEscapeHtml(actorId)}" ${mkReposRowActionDisabled(actor, "push")}>Push</button>
@@ -251,13 +306,42 @@ function mkReposRepositoryGridHtml() {
         </td>
       </tr>
     `;
-  }).join("") : `<tr><td colspan="7" class="mk-repos-empty">No allowed local actors found.</td></tr>`;
+  }) : [];
+
+  const remoteRows = mkReposRepositoryRemoteOnlyRows(remoteCharacters, usedVaultIds).map(character => {
+    const vaultId = mkReposRepositoryVaultId(character);
+    const actorType = mkReposRepositoryActorType(character);
+    const system = [character.systemId, character.systemVersion].filter(Boolean).join(" ") || "-";
+    const updatedAt = character.updatedAt || "";
+
+    return `
+      <tr class="mk-repos-row-remote" data-vault-id="${mkReposEscapeHtml(vaultId)}">
+        <td class="mk-repos-cell-actor"><strong>${mkReposEscapeHtml(character.name || "(unnamed)")}</strong></td>
+        <td>${mkReposEscapeHtml(actorType || "-")}</td>
+        <td>${mkReposEscapeHtml(system)}</td>
+        <td><code>${mkReposEscapeHtml(vaultId)}</code></td>
+        <td>-</td>
+        <td>${mkReposEscapeHtml(character.revision ?? "-")}</td>
+        <td title="${mkReposEscapeHtml(updatedAt || "Remote record")}">Remote</td>
+        <td class="mk-repos-actions">
+          <button type="button" data-mk-repos-action="import" data-vault-id="${mkReposEscapeHtml(vaultId)}" ${mkReposImportActionDisabled(character)}>Import</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  const allRows = rows.concat(remoteRows).join("") || `<tr><td colspan="8" class="mk-repos-empty">No local or remote repository actors found.</td></tr>`;
+  const remoteErrorHtml = remoteError
+    ? `<div class="mk-repos-grid-warning">Remote repository records could not be loaded: ${mkReposEscapeHtml(remoteError)}</div>`
+    : "";
 
   return `
     <section class="mk-repos-repository-view">
       <div class="mk-repos-grid-toolbar">
         <input type="search" class="mk-repos-grid-search" placeholder="Search actors..." aria-label="Search actors">
+        <button type="button" class="mk-repos-button" data-mk-repos-refresh>Refresh</button>
       </div>
+      ${remoteErrorHtml}
       <div class="mk-repos-grid-scroll">
         <table class="mk-repos-actor-grid">
           <thead>
@@ -267,11 +351,12 @@ function mkReposRepositoryGridHtml() {
               <th>System</th>
               <th>Vault ID</th>
               <th>LR</th>
+              <th>RR</th>
               <th>Last Synced (h)</th>
               <th></th>
             </tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>${allRows}</tbody>
         </table>
       </div>
     </section>
@@ -305,7 +390,7 @@ function mkReposRepositoryApplicationClass() {
     };
 
     async _renderHTML(context, options) {
-      return mkReposRepositoryGridHtml();
+      return await mkReposRepositoryGridHtml();
     }
 
     _replaceHTML(result, content, options) {
@@ -336,11 +421,11 @@ async function mkReposRefreshRepositoryGrid(root, app) {
 
   const current = root?.querySelector?.(".mk-repos-repository-view");
   if (!current) return;
-  current.outerHTML = mkReposRepositoryGridHtml();
+  current.outerHTML = await mkReposRepositoryGridHtml();
   mkReposActivateRepositoryGrid(root, app);
 }
 
-async function mkReposHandleRepositoryAction(action, actor, root, app) {
+async function mkReposHandleRepositoryAction(action, actor, root, app, vaultId = "") {
   if (action === "push") {
     await mkReposPushActorWithPrompt(actor);
     await mkReposRefreshRepositoryGrid(root, app);
@@ -350,10 +435,28 @@ async function mkReposHandleRepositoryAction(action, actor, root, app) {
   if (action === "pull") {
     await mkReposPullActorWithPrompt(actor);
     await mkReposRefreshRepositoryGrid(root, app);
+    return;
+  }
+
+  if (action === "import") {
+    const proceed = await mkReposConfirm(`Import repository actor ${vaultId}?`);
+    if (!proceed) return;
+    const result = await mkReposWithProgress("Importing repository actor...", () => mkReposPullByVaultId(vaultId));
+    mkReposNotify(`Imported ${result.actor.name}. Revision ${result.revision}.`);
+    await mkReposRefreshRepositoryGrid(root, app);
   }
 }
 
 function mkReposActivateRepositoryGrid(root, app) {
+  root.querySelector("[data-mk-repos-refresh]")?.addEventListener("click", async () => {
+    try {
+      await mkReposRefreshRepositoryGrid(root, app);
+    } catch (err) {
+      console.error(`${MK_REPOS.MODULE_TITLE} repository refresh failed`, err);
+      mkReposNotify(err.message ?? err, "error");
+    }
+  });
+
   const search = root.querySelector(".mk-repos-grid-search");
   search?.addEventListener("input", event => {
     const query = String(event.currentTarget.value || "").trim().toLowerCase();
@@ -368,10 +471,11 @@ function mkReposActivateRepositoryGrid(root, app) {
       const target = event.currentTarget;
       const actor = mkReposActorById(target.dataset.actorId);
       const action = target.dataset.mkReposAction;
-      if (!actor || !action) return;
+      const vaultId = target.dataset.vaultId || actor?.getFlag?.(MK_REPOS.FLAG_SCOPE, MK_REPOS.FLAG_VAULT_ID) || "";
+      if (!action || (!actor && action !== "import")) return;
 
       try {
-        await mkReposHandleRepositoryAction(action, actor, root, app);
+        await mkReposHandleRepositoryAction(action, actor, root, app, vaultId);
       } catch (err) {
         console.error(`${MK_REPOS.MODULE_TITLE} repository action failed`, err);
         mkReposNotify(err.message ?? err, "error");
@@ -380,11 +484,11 @@ function mkReposActivateRepositoryGrid(root, app) {
   });
 }
 
-function mkReposOpenRepositoryModalFallback() {
+async function mkReposOpenRepositoryModalFallback() {
   const overlay = mkReposModal({
     title: "MK-Repos Repository",
     width: 1180,
-    content: mkReposRepositoryGridHtml(),
+    content: await mkReposRepositoryGridHtml(),
     buttons: [
       { label: "Close", icon: "fas fa-xmark" }
     ]

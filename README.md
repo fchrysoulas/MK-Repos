@@ -52,9 +52,9 @@ When updating the Apps Script after it has already been deployed, open **Deploy 
 
 1. Open **Configure Settings -> Module Settings -> MK-Repos -> Repository Controls**.
 2. Click **Open MK-Repos**.
-3. Search or scan the actor grid to inspect local repository status and push or pull each actor from its row.
+3. Search or scan the actor grid to inspect local repository status, remote repository records, and push, pull, or import actors from each row.
 
-The grid shows Actor, Type, System, Vault ID, LR, and Last Synced as elapsed hours with two decimal places. It only lists local actors whose type is enabled in **Allowed Actor Types**.
+The grid shows Actor, Type, System, Vault ID, LR (local revision), RR (repository revision), and Last Synced as elapsed hours with two decimal places. Actors that exist only in Google Sheets appear as remote rows with an **Import** button.
 
 Use **Test Connection** in the MK-Repos module settings, near the URL and token settings, to add a dummy row to the `ConnectionTests` sheet.
 
@@ -84,6 +84,12 @@ Pull by vault ID:
 
 ```js
 await game.mkRepos.pullByVaultId("your-vault-id-here");
+```
+
+List repository records:
+
+```js
+await game.mkRepos.listRepository();
 ```
 
 ## Repository Tabs

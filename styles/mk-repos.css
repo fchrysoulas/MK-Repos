@@ -96,6 +96,8 @@
 .mk-repos-grid-toolbar {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.48);
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
@@ -103,6 +105,14 @@
 
 .mk-repos-grid-search {
   width: min(420px, 100%);
+}
+
+.mk-repos-grid-warning {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  color: var(--color-text-light-highlight, #f5f0e8);
+  background: rgba(120, 70, 0, 0.28);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .mk-repos-grid-scroll {
@@ -156,6 +166,10 @@
 
 .mk-repos-row-disabled {
   opacity: 0.62;
+}
+
+.mk-repos-row-remote {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .mk-repos-empty {
