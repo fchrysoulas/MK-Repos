@@ -1,6 +1,6 @@
 export const MK_REPOS = {
   ID: "mk-repos",
-  VERSION: "1.3.0",
+  VERSION: "1.3.1",
   FLAG_SCOPE: "mk-repos",
   FLAG_VAULT_ID: "vaultId",
   FLAG_REVISION: "revision",

@@ -106,6 +106,6 @@ The Apps Script creates these tabs:
 
 ## Safety Notes
 
-The repository token is not a high-security secret because it is used by client-side Foundry code. Use it as a shared access key for your own table, not as a valuable password.
+The repository token is visually masked in Foundry's settings, but it is not a high-security secret because it is used by client-side Foundry code. Use it as a shared access key for your own table, not as a valuable password.
 
 Do not use auto-sync for PCs until conflict and merge handling are expanded. Manual Push/Pull is safer.

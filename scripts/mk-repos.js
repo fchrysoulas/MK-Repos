@@ -1,5 +1,5 @@
 /*
- * MK-Repos v1.3.0
+ * MK-Repos v1.3.1
  * Foundry VTT v12-v14 compatible character repository bridge.
  */
 
@@ -139,6 +139,27 @@ function mkReposExposeApi() {
   };
 }
 
+function mkReposSettingsHtmlElement(html) {
+  if (html instanceof HTMLElement) return html;
+  if (html?.[0] instanceof HTMLElement) return html[0];
+  return null;
+}
+
+function mkReposMaskRepositoryTokenSetting(html) {
+  const root = mkReposSettingsHtmlElement(html);
+  const selectors = [
+    `input[name="${MK_REPOS.ID}.vaultToken"]`,
+    `input[data-setting-id="${MK_REPOS.ID}.vaultToken"]`,
+    `input[id="${MK_REPOS.ID}.vaultToken"]`
+  ];
+  const input = root?.querySelector?.(selectors.join(", "));
+  if (!input) return;
+
+  input.type = "password";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+}
+
 Hooks.once("init", () => {
   mkReposRegisterSettings();
 });
@@ -146,4 +167,9 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   mkReposExposeApi();
   console.log(`${MK_REPOS.MODULE_TITLE} | Ready v${MK_REPOS.VERSION} for Foundry ${mkReposGameVersion()} / system ${mkReposSystemId()} ${mkReposSystemVersion()}`);
+});
+
+Hooks.on("renderSettingsConfig", (app, html) => {
+  mkReposMaskRepositoryTokenSetting(html);
+  setTimeout(() => mkReposMaskRepositoryTokenSetting(html), 0);
 });

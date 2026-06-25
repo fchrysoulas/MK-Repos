@@ -2,6 +2,11 @@
 
 MK-Repos uses semantic versions. Bump the version on every update: patch for fixes, refactors, and small UI moves; minor for user-visible feature additions; major for breaking changes.
 
+## 1.3.1
+
+- Masked the Repository Token field in Foundry's module settings by rendering it as a password input.
+- Updated module, client script, Apps Script, manifest download URL, and bridge version values to `1.3.1`.
+
 ## 1.3.0
 
 - Added remote repository records to the Repository Controls grid by reading the Apps Script `list` action.
